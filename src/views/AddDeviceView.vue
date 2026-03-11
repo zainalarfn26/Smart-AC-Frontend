@@ -16,6 +16,18 @@
       </div>
 
       <div class="input-group">
+        <label>Merk AC</label>
+        <select v-model="form.merk_ac" required>
+          <option value="DAIKIN">Daikin</option>
+          <option value="PANASONIC">Panasonic</option>
+          <option value="SHARP">Sharp</option>
+          <option value="SAMSUNG">Samsung</option>
+          <option value="LG">LG</option>
+        </select>
+        <small>Pilih merk AC agar sinyal Infrared dapat diterjemahkan dengan tepat.</small>
+      </div>
+
+      <div class="input-group">
         <label>Batas Suhu Atas (°C) / Hysteresis Turbo</label>
         <input v-model="form.batas_atas" type="number" step="0.1" placeholder="Contoh: 28" required />
       </div>
@@ -40,9 +52,11 @@ import axios from 'axios'
 const router = useRouter()
 const isSubmitting = ref(false)
 
+// State form kini mencakup merk_ac
 const form = reactive({
   nama: '',
   device_id: '',
+  merk_ac: 'DAIKIN', // Nilai default saat halaman pertama kali dibuka
   batas_atas: 28.0,
   batas_bawah: 24.0
 })
@@ -52,12 +66,13 @@ const submitDevice = async () => {
   isSubmitting.value = true
 
   try {
+    // Axios akan secara otomatis mengirimkan merk_ac bersama data lainnya ke Backend Express
     await axios.post('http://localhost:3000/api/devices', form)
     alert('Perangkat berhasil ditambahkan!')
     router.push('/')
   } catch (error) {
     console.error(error)
-    alert('Gagal menambahkan perangkat. Pastikan backend menyala.')
+    alert('Gagal menambahkan perangkat. Pastikan backend menyala dan kolom database sudah diperbarui.')
   } finally {
     isSubmitting.value = false
   }
@@ -65,15 +80,24 @@ const submitDevice = async () => {
 </script>
 
 <style scoped>
-/* CO-PASTE STYLE ANDA DI SINI */
 .p-4 { padding: 20px; background-color: #f4f7f6; min-height: 100vh;}
 h2 { color: #333; margin-bottom: 5px; }
 .subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
 .form-card { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.04); }
 .input-group { margin-bottom: 15px; display: flex; flex-direction: column; }
 .input-group label { font-weight: bold; margin-bottom: 5px; font-size: 14px; color: #555;}
-.input-group input { padding: 12px; border: 1px solid #ddd; border-radius: 8px; outline: none; font-size: 14px; }
-.input-group input:focus { border-color: #007bff; }
+.input-group input, 
+.input-group select { /* Tambahan style untuk select agar seragam dengan input */
+  padding: 12px; 
+  border: 1px solid #ddd; 
+  border-radius: 8px; 
+  outline: none; 
+  font-size: 14px; 
+  font-family: inherit;
+}
+.input-group select { background-color: white; cursor: pointer; }
+.input-group input:focus,
+.input-group select:focus { border-color: #007bff; }
 .input-group small { color: #888; font-size: 11px; margin-top: 6px; }
 .btn-submit { background: #007bff; color: white; border: none; padding: 15px; border-radius: 8px; width: 100%; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s;}
 .btn-submit:disabled { background: #a0cbfc; cursor: not-allowed; }

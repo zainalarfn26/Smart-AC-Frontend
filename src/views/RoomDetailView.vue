@@ -85,25 +85,63 @@
         </div>
       </div>
 
-      <div class="control-group info-group">
-        <h3>Parameter Hysteresis</h3>
-        <div class="hysteresis-info">
-          <div class="info-box">
-            <span class="label">Batas Bawah (Normal)</span>
-            <span class="value">{{ device.batas_bawah }}°C</span>
+      <div class="control-group settings-group">
+        <div class="settings-header">
+          <h3>⚙️ Pengaturan Perangkat</h3>
+          <button @click="toggleEdit" class="btn-edit">
+            {{ isEditing ? 'Batal' : 'Edit' }}
+          </button>
+        </div>
+        
+        <form v-if="isEditing" @submit.prevent="saveSettings" class="settings-form">
+          <div class="input-group">
+            <label>Merk AC (Untuk Sinyal IR)</label>
+            <select v-model="editForm.merk_ac">
+              <option value="DAIKIN">Daikin</option>
+              <option value="PANASONIC">Panasonic</option>
+              <option value="SHARP">Sharp</option>
+              <option value="SAMSUNG">Samsung</option>
+              <option value="LG">LG</option>
+            </select>
           </div>
+          <div class="row-inputs">
+            <div class="input-group">
+              <label>Batas Atas (°C)</label>
+              <input type="number" step="0.1" v-model="editForm.batas_atas" />
+            </div>
+            <div class="input-group">
+              <label>Batas Bawah (°C)</label>
+              <input type="number" step="0.1" v-model="editForm.batas_bawah" />
+            </div>
+          </div>
+          <button type="submit" class="btn-save" :disabled="isSavingSettings">
+            {{ isSavingSettings ? 'Menyimpan...' : 'Simpan Perubahan' }}
+          </button>
+        </form>
+
+        <div v-else class="settings-display">
           <div class="info-box">
-            <span class="label">Batas Atas (Turbo)</span>
-            <span class="value">{{ device.batas_atas }}°C</span>
+            <span class="label">Merk AC</span>
+            <span class="value">{{ device.merk_ac || 'Belum Diatur' }}</span>
+          </div>
+          <div class="hysteresis-info">
+            <div class="info-box">
+              <span class="label">Bawah (Normal)</span>
+              <span class="value">{{ device.batas_bawah }}°C</span>
+            </div>
+            <div class="info-box">
+              <span class="label">Atas (Turbo)</span>
+              <span class="value">{{ device.batas_atas }}°C</span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+      </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
 
@@ -112,12 +150,20 @@ const router = useRouter()
 
 const device = ref(null)
 const isLoading = ref(true)
-const isActionLoading = ref(false) // Mencegah spam klik tombol
+const isActionLoading = ref(false) 
 let pollingInterval = null
+
+// --- State untuk fitur Edit Pengaturan ---
+const isEditing = ref(false)
+const isSavingSettings = ref(false)
+const editForm = reactive({
+  merk_ac: '',
+  batas_atas: 0,
+  batas_bawah: 0
+})
 
 const roomId = route.params.id
 
-// Mengambil Data Detail LIVE
 const fetchRoomDetail = async () => {
   try {
     const response = await axios.get(`http://localhost:3000/api/devices/${roomId}`)
@@ -133,28 +179,21 @@ const goBack = () => {
   router.push('/')
 }
 
-// Menembak API Kontrol (Auto/Manual)
 const setModeKontrol = async (mode) => {
   if (device.value.mode_kontrol === mode) return
-  
-  // Optimistic UI Update (Ganti tampilan langsung agar terasa cepat)
   const previousMode = device.value.mode_kontrol
   device.value.mode_kontrol = mode
-  
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/mode`, { mode })
   } catch (error) {
-    console.error("Gagal mengubah mode:", error)
-    device.value.mode_kontrol = previousMode // Revert jika gagal
+    device.value.mode_kontrol = previousMode 
     alert("Gagal menghubungi server")
   }
 }
 
-// Menembak API Power ON/OFF
 const togglePower = async () => {
   if (isActionLoading.value) return
   isActionLoading.value = true
-
   const newStatus = device.value.status_ac === 'ON' ? 'OFF' : 'ON'
   const previousStatus = device.value.status_ac
   const previousModeAC = device.value.mode_ac
@@ -165,8 +204,7 @@ const togglePower = async () => {
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/power`, { status: newStatus })
   } catch (error) {
-    console.error("Gagal mengontrol power:", error)
-    device.value.status_ac = previousStatus // Revert
+    device.value.status_ac = previousStatus 
     device.value.mode_ac = previousModeAC
     alert("Gagal mengeksekusi perintah")
   } finally {
@@ -174,28 +212,56 @@ const togglePower = async () => {
   }
 }
 
-// Menembak API Mode AC (Turbo/Normal)
 const setModeAC = async (mode_ac) => {
   if (device.value.mode_ac === mode_ac || device.value.status_ac === 'OFF' || isActionLoading.value) return
   isActionLoading.value = true
-
   const previousMode = device.value.mode_ac
   device.value.mode_ac = mode_ac
 
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/mode-ac`, { mode_ac })
   } catch (error) {
-    console.error("Gagal mengubah mode AC:", error)
-    device.value.mode_ac = previousMode // Revert
+    device.value.mode_ac = previousMode 
     alert("Gagal mengeksekusi perintah")
   } finally {
     isActionLoading.value = false
   }
 }
 
+// --- Fungsi untuk mengurus form Edit ---
+const toggleEdit = () => {
+  isEditing.value = !isEditing.value
+  if (isEditing.value) {
+    // Isi form dengan data yang ada sekarang saat tombol edit ditekan
+    editForm.merk_ac = device.value.merk_ac || 'DAIKIN'
+    editForm.batas_atas = device.value.batas_atas
+    editForm.batas_bawah = device.value.batas_bawah
+  }
+}
+
+const saveSettings = async () => {
+  if (isSavingSettings.value) return
+  isSavingSettings.value = true
+
+  try {
+    await axios.put(`http://localhost:3000/api/devices/${roomId}`, editForm)
+    // Update tampilan lokal agar tidak perlu refresh
+    device.value.merk_ac = editForm.merk_ac
+    device.value.batas_atas = editForm.batas_atas
+    device.value.batas_bawah = editForm.batas_bawah
+    
+    isEditing.value = false
+    alert('Pengaturan berhasil diperbarui!')
+  } catch (error) {
+    console.error("Gagal menyimpan pengaturan:", error)
+    alert("Gagal menyimpan pengaturan. Pastikan backend menyala.")
+  } finally {
+    isSavingSettings.value = false
+  }
+}
+
 onMounted(() => {
   fetchRoomDetail()
-  // Refresh data setiap 3 detik untuk memantau suhu realtime
   pollingInterval = setInterval(fetchRoomDetail, 3000)
 })
 
@@ -237,10 +303,23 @@ onUnmounted(() => {
 .btn-power:disabled { opacity: 0.7; cursor: not-allowed; }
 .btn-power.power-on { background: #d4edda; color: #155724; }
 .mode-ac-control h4 { font-size: 13px; color: #666; margin: 15px 0 5px 0;}
-.info-group { background: #f8f9fa; }
-.hysteresis-info { display: flex; gap: 10px; margin-top: 10px; }
-.info-box { flex: 1; background: white; padding: 15px; border-radius: 10px; text-align: center; border: 1px solid #e9ecef; }
-.info-box .label { display: block; font-size: 11px; color: #777; margin-bottom: 5px; }
-.info-box .value { display: block; font-size: 18px; font-weight: bold; color: #333; }
+
+/* --- STYLE UNTUK PENGATURAN PERANGKAT --- */
+.settings-group { background: #fcfcfc; border: 1px solid #eee; }
+.settings-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.btn-edit { background: none; border: 1px solid #007bff; color: #007bff; padding: 4px 12px; border-radius: 15px; font-size: 12px; cursor: pointer; font-weight: bold; }
+.settings-display .info-box { background: white; padding: 12px; border-radius: 8px; border: 1px solid #eee; text-align: center; margin-bottom: 10px; }
+.settings-display .label { display: block; font-size: 11px; color: #888; margin-bottom: 4px; }
+.settings-display .value { display: block; font-size: 16px; font-weight: bold; color: #333; }
+.hysteresis-info { display: flex; gap: 10px; }
+.hysteresis-info .info-box { flex: 1; margin-bottom: 0; }
+
+.settings-form { display: flex; flex-direction: column; gap: 12px; background: white; padding: 15px; border-radius: 10px; border: 1px solid #e0e0e0;}
+.row-inputs { display: flex; gap: 10px; }
+.row-inputs .input-group { flex: 1; }
+.input-group label { display: block; font-size: 12px; font-weight: bold; color: #555; margin-bottom: 5px; }
+.input-group input, .input-group select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-family: inherit; font-size: 13px;}
+.btn-save { background: #28a745; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px;}
+.btn-save:disabled { background: #94d3a2; cursor: not-allowed; }
 .loading-state { text-align: center; padding: 50px; color: #888; }
 </style>
