@@ -48,15 +48,16 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
+import { toast } from 'vue3-toastify'
+import 'vue3-toastify/dist/index.css'
 
 const router = useRouter()
 const isSubmitting = ref(false)
 
-// State form kini mencakup merk_ac
 const form = reactive({
   nama: '',
   device_id: '',
-  merk_ac: 'DAIKIN', // Nilai default saat halaman pertama kali dibuka
+  merk_ac: 'DAIKIN',
   batas_atas: 28.0,
   batas_bawah: 24.0
 })
@@ -66,13 +67,23 @@ const submitDevice = async () => {
   isSubmitting.value = true
 
   try {
-    // Axios akan secara otomatis mengirimkan merk_ac bersama data lainnya ke Backend Express
     await axios.post('http://localhost:3000/api/devices', form)
-    alert('Perangkat berhasil ditambahkan!')
-    router.push('/')
+    
+    toast.success('Perangkat berhasil ditambahkan!', {
+      autoClose: 2000,
+      position: toast.POSITION.BOTTOM_RIGHT,
+    })
+    
+    setTimeout(() => {
+      router.push('/')
+    }, 2000)
+
   } catch (error) {
     console.error(error)
-    alert('Gagal menambahkan perangkat. Pastikan backend menyala dan kolom database sudah diperbarui.')
+    toast.error('Gagal menambahkan perangkat. Cek koneksi backend.', {
+      autoClose: 3000,
+      position: toast.POSITION.BOTTOM_RIGHT,
+    })
   } finally {
     isSubmitting.value = false
   }

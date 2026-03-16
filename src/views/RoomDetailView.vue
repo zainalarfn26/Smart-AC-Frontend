@@ -135,8 +135,25 @@
             </div>
           </div>
         </div>
+
+        <div class="danger-zone" v-if="!isEditing">
+          <button @click="confirmDelete" class="btn-delete"> Hapus Ruangan</button>
+        </div>
       </div>
+
+      <div v-if="showDeleteModal" class="modal-overlay">
+        <div class="modal-card">
+          <div class="modal-icon">⚠️</div>
+          <h3>Hapus Ruangan?</h3>
+          <p>Apakah Anda yakin ingin menghapus <strong>{{ device?.nama_ruangan }}</strong>? Semua riwayat log untuk ruangan ini juga akan ikut terhapus permanen.</p>
+          <div class="modal-actions">
+            <button @click="cancelDelete" class="btn-cancel">Batal</button>
+            <button @click="executeDelete" class="btn-confirm-delete">Ya, Hapus!</button>
+          </div>
+        </div>
       </div>
+
+    </div>
   </div>
 </template>
 
@@ -144,6 +161,8 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
+import { toast } from 'vue3-toastify'
+import 'vue3-toastify/dist/index.css'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,6 +180,9 @@ const editForm = reactive({
   batas_atas: 0,
   batas_bawah: 0
 })
+
+// --- State untuk Modal Hapus ---
+const showDeleteModal = ref(false)
 
 const roomId = route.params.id
 
@@ -181,19 +203,23 @@ const goBack = () => {
 
 const setModeKontrol = async (mode) => {
   if (device.value.mode_kontrol === mode) return
+  
   const previousMode = device.value.mode_kontrol
   device.value.mode_kontrol = mode
+  
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/mode`, { mode })
+    toast.info(`Sistem diubah ke mode ${mode}`, { autoClose: 1500, position: toast.POSITION.BOTTOM_RIGHT })
   } catch (error) {
     device.value.mode_kontrol = previousMode 
-    alert("Gagal menghubungi server")
+    toast.error("Gagal mengubah mode sistem", { position: toast.POSITION.BOTTOM_RIGHT })
   }
 }
 
 const togglePower = async () => {
   if (isActionLoading.value) return
   isActionLoading.value = true
+
   const newStatus = device.value.status_ac === 'ON' ? 'OFF' : 'ON'
   const previousStatus = device.value.status_ac
   const previousModeAC = device.value.mode_ac
@@ -203,10 +229,11 @@ const togglePower = async () => {
 
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/power`, { status: newStatus })
+    toast.success(`AC berhasil di-${newStatus}-kan`, { autoClose: 1500, position: toast.POSITION.BOTTOM_RIGHT })
   } catch (error) {
     device.value.status_ac = previousStatus 
     device.value.mode_ac = previousModeAC
-    alert("Gagal mengeksekusi perintah")
+    toast.error("Gagal mengeksekusi perintah AC", { position: toast.POSITION.BOTTOM_RIGHT })
   } finally {
     isActionLoading.value = false
   }
@@ -215,24 +242,24 @@ const togglePower = async () => {
 const setModeAC = async (mode_ac) => {
   if (device.value.mode_ac === mode_ac || device.value.status_ac === 'OFF' || isActionLoading.value) return
   isActionLoading.value = true
+
   const previousMode = device.value.mode_ac
   device.value.mode_ac = mode_ac
 
   try {
     await axios.post(`http://localhost:3000/api/devices/${roomId}/mode-ac`, { mode_ac })
+    toast.success(`Mode AC diubah menjadi ${mode_ac}`, { autoClose: 1500, position: toast.POSITION.BOTTOM_RIGHT })
   } catch (error) {
     device.value.mode_ac = previousMode 
-    alert("Gagal mengeksekusi perintah")
+    toast.error("Gagal mengeksekusi perintah mode", { position: toast.POSITION.BOTTOM_RIGHT })
   } finally {
     isActionLoading.value = false
   }
 }
 
-// --- Fungsi untuk mengurus form Edit ---
 const toggleEdit = () => {
   isEditing.value = !isEditing.value
   if (isEditing.value) {
-    // Isi form dengan data yang ada sekarang saat tombol edit ditekan
     editForm.merk_ac = device.value.merk_ac || 'DAIKIN'
     editForm.batas_atas = device.value.batas_atas
     editForm.batas_bawah = device.value.batas_bawah
@@ -245,18 +272,43 @@ const saveSettings = async () => {
 
   try {
     await axios.put(`http://localhost:3000/api/devices/${roomId}`, editForm)
-    // Update tampilan lokal agar tidak perlu refresh
     device.value.merk_ac = editForm.merk_ac
     device.value.batas_atas = editForm.batas_atas
     device.value.batas_bawah = editForm.batas_bawah
     
     isEditing.value = false
-    alert('Pengaturan berhasil diperbarui!')
+    toast.success('Pengaturan berhasil diperbarui!', { autoClose: 2000, position: toast.POSITION.BOTTOM_RIGHT })
   } catch (error) {
     console.error("Gagal menyimpan pengaturan:", error)
-    alert("Gagal menyimpan pengaturan. Pastikan backend menyala.")
+    toast.error("Gagal menyimpan pengaturan. Pastikan backend menyala.", { position: toast.POSITION.BOTTOM_RIGHT })
   } finally {
     isSavingSettings.value = false
+  }
+}
+
+// --- Fungsi-fungsi untuk Modal Hapus ---
+const confirmDelete = () => {
+  showDeleteModal.value = true
+}
+
+const cancelDelete = () => {
+  showDeleteModal.value = false
+}
+
+const executeDelete = async () => {
+  showDeleteModal.value = false 
+  
+  try {
+    await axios.delete(`http://localhost:3000/api/devices/${roomId}`)
+    toast.success('Ruangan berhasil dihapus!', { autoClose: 2000, position: toast.POSITION.BOTTOM_RIGHT })
+    
+    setTimeout(() => {
+      router.push('/')
+    }, 1500)
+    
+  } catch (error) {
+    console.error("Gagal menghapus ruangan:", error)
+    toast.error("Gagal menghapus ruangan. Pastikan backend menyala.", { position: toast.POSITION.BOTTOM_RIGHT })
   }
 }
 
@@ -271,7 +323,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* CO-PASTE SEMUA STYLE DARI KODE ANDA SEBELUMNYA DI SINI */
 .detail-container { padding: 20px; background-color: #f4f7f6; min-height: 100vh; padding-bottom: 90px;}
 .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .header h2 { font-size: 18px; font-weight: 600; color: #333; margin: 0; }
@@ -322,4 +373,36 @@ onUnmounted(() => {
 .btn-save { background: #28a745; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: bold; cursor: pointer; margin-top: 5px;}
 .btn-save:disabled { background: #94d3a2; cursor: not-allowed; }
 .loading-state { text-align: center; padding: 50px; color: #888; }
+
+.danger-zone { margin-top: 15px; border-top: 1px dashed #ffcdd2; padding-top: 15px; }
+.btn-delete { width: 100%; background: white; color: #dc3545; border: 1px solid #dc3545; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px;}
+.btn-delete:hover { background: #dc3545; color: white; }
+
+/* --- STYLE UNTUK CUSTOM MODAL HAPUS --- */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(3px);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 1000;
+}
+.modal-card {
+  background: white; padding: 25px; border-radius: 16px;
+  width: 85%; max-width: 320px; text-align: center;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  animation: slideUp 0.3s ease;
+}
+.modal-icon { font-size: 40px; margin-bottom: 10px; }
+.modal-card h3 { margin: 0 0 10px 0; color: #333; font-size: 18px; }
+.modal-card p { font-size: 13px; color: #666; margin-bottom: 20px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 10px; }
+.btn-cancel { flex: 1; padding: 12px; background: #e9ecef; border: none; border-radius: 8px; color: #495057; font-weight: bold; cursor: pointer; transition: 0.2s;}
+.btn-cancel:hover { background: #dde2e6; }
+.btn-confirm-delete { flex: 1; padding: 12px; background: #dc3545; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);}
+.btn-confirm-delete:hover { background: #c82333; transform: translateY(-1px);}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
